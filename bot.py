@@ -58,42 +58,42 @@ def get_eth_balance(address):
         balance_wei = w3_eth.eth.get_balance(address)
         return w3_eth.from_wei(balance_wei, 'ether')
     except:
-        return None
+        return 0
 
 def get_bnb_balance(address):
     try:
         balance_wei = w3_bsc.eth.get_balance(address)
         return w3_bsc.from_wei(balance_wei, 'ether')
     except:
-        return None
+        return 0
 
 def get_polygon_balance(address):
     try:
         balance_wei = w3_polygon.eth.get_balance(address)
         return w3_polygon.from_wei(balance_wei, 'ether')
     except:
-        return None
+        return 0
 
 def get_avalanche_balance(address):
     try:
         balance_wei = w3_avalanche.eth.get_balance(address)
         return w3_avalanche.from_wei(balance_wei, 'ether')
     except:
-        return None
+        return 0
 
 def get_arbitrum_balance(address):
     try:
         balance_wei = w3_arbitrum.eth.get_balance(address)
         return w3_arbitrum.from_wei(balance_wei, 'ether')
     except:
-        return None
+        return 0
 
 def get_optimism_balance(address):
     try:
         balance_wei = w3_optimism.eth.get_balance(address)
         return w3_optimism.from_wei(balance_wei, 'ether')
     except:
-        return None
+        return 0
 
 def get_usdt_balance(web3, address, contract_address):
     try:
@@ -101,7 +101,7 @@ def get_usdt_balance(web3, address, contract_address):
         balance = contract.functions.balanceOf(address).call()
         return balance / 10**6
     except:
-        return None
+        return 0
 
 def get_btc_balance(address):
     url = f"https://api.blockchair.com/bitcoin/dashboards/address/{address}"
@@ -111,7 +111,7 @@ def get_btc_balance(address):
         balance_sat = data['data'][address]['address']['balance']
         return balance_sat / 1e8
     except:
-        return None
+        return 0
 
 def get_solana_balance(address):
     url = "https://api.mainnet-beta.solana.com"
@@ -129,7 +129,7 @@ def get_solana_balance(address):
             return data['result']['value'] / 1e9
     except:
         pass
-    return None
+    return 0
 
 def get_dogecoin_balance(address):
     url = f"https://api.blockchair.com/dogecoin/dashboards/address/{address}"
@@ -139,7 +139,7 @@ def get_dogecoin_balance(address):
         balance = data['data'][address]['address']['balance'] / 1e8
         return balance
     except:
-        return None
+        return 0
 
 def get_ripple_balance(address):
     url = f"https://data.ripple.com/v2/accounts/{address}/balances"
@@ -152,7 +152,7 @@ def get_ripple_balance(address):
                     return float(bal['value'])
     except:
         pass
-    return None
+    return 0
 
 def get_litecoin_balance(address):
     url = f"https://api.blockchair.com/litecoin/dashboards/address/{address}"
@@ -162,7 +162,7 @@ def get_litecoin_balance(address):
         balance = data['data'][address]['address']['balance'] / 1e8
         return balance
     except:
-        return None
+        return 0
 
 def get_tron_balance(address):
     url = f"https://api.trongrid.io/v1/accounts/{address}"
@@ -174,7 +174,7 @@ def get_tron_balance(address):
             return balance_sun / 1e6
     except:
         pass
-    return None
+    return 0
 
 def get_usdt_trc20_balance(address):
     url = f"https://api.trongrid.io/v1/accounts/{address}"
@@ -187,7 +187,7 @@ def get_usdt_trc20_balance(address):
                     return int(trc20['TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t']) / 1e6
     except:
         pass
-    return None
+    return 0
 
 def mnemonic_to_solana_address(mnemonic):
     seed = Mnemonic.to_seed(mnemonic, passphrase="")
@@ -229,11 +229,18 @@ def derive_addresses_from_mnemonic(mnemonic):
         trx_addr = None
     
     return {
-        "btc": btc_addr, "eth": eth_addr, "bnb": eth_addr,
-        "polygon": eth_addr, "avalanche": eth_addr,
-        "arbitrum": eth_addr, "optimism": eth_addr,
-        "doge": doge_addr, "ltc": ltc_addr, "xrp": xrp_addr,
-        "sol": sol_addr, "trx": trx_addr
+        "btc": btc_addr,
+        "eth": eth_addr,
+        "bnb": eth_addr,
+        "polygon": eth_addr,
+        "avalanche": eth_addr,
+        "arbitrum": eth_addr,
+        "optimism": eth_addr,
+        "doge": doge_addr,
+        "ltc": ltc_addr,
+        "xrp": xrp_addr,
+        "sol": sol_addr,
+        "trx": trx_addr
     }
 
 def check_all_balances(mnemonic):
@@ -241,20 +248,20 @@ def check_all_balances(mnemonic):
         addrs = derive_addresses_from_mnemonic(mnemonic)
         
         results = {
-            "btc": get_btc_balance(addrs["btc"]) or 0,
-            "eth": get_eth_balance(addrs["eth"]) or 0,
-            "bnb": get_bnb_balance(addrs["bnb"]) or 0,
-            "polygon": get_polygon_balance(addrs["polygon"]) or 0,
-            "avalanche": get_avalanche_balance(addrs["avalanche"]) or 0,
-            "arbitrum": get_arbitrum_balance(addrs["arbitrum"]) or 0,
-            "optimism": get_optimism_balance(addrs["optimism"]) or 0,
-            "usdt_erc20": get_usdt_balance(w3_eth, addrs["eth"], USDT_ERC20) or 0,
-            "usdt_bep20": get_usdt_balance(w3_bsc, addrs["bnb"], USDT_BEP20) or 0,
-            "usdt_polygon": get_usdt_balance(w3_polygon, addrs["polygon"], USDT_POLYGON) or 0,
-            "usdt_avalanche": get_usdt_balance(w3_avalanche, addrs["avalanche"], USDT_AVALANCHE) or 0,
-            "usdt_arbitrum": get_usdt_balance(w3_arbitrum, addrs["arbitrum"], USDT_ARBITRUM) or 0,
-            "usdt_optimism": get_usdt_balance(w3_optimism, addrs["optimism"], USDT_OPTIMISM) or 0,
-            "sol": get_solana_balance(addrs["sol"]) or 0,
+            "btc": get_btc_balance(addrs["btc"]),
+            "eth": get_eth_balance(addrs["eth"]),
+            "bnb": get_bnb_balance(addrs["bnb"]),
+            "polygon": get_polygon_balance(addrs["polygon"]),
+            "avalanche": get_avalanche_balance(addrs["avalanche"]),
+            "arbitrum": get_arbitrum_balance(addrs["arbitrum"]),
+            "optimism": get_optimism_balance(addrs["optimism"]),
+            "usdt_erc20": get_usdt_balance(w3_eth, addrs["eth"], USDT_ERC20),
+            "usdt_bep20": get_usdt_balance(w3_bsc, addrs["bnb"], USDT_BEP20),
+            "usdt_polygon": get_usdt_balance(w3_polygon, addrs["polygon"], USDT_POLYGON),
+            "usdt_avalanche": get_usdt_balance(w3_avalanche, addrs["avalanche"], USDT_AVALANCHE),
+            "usdt_arbitrum": get_usdt_balance(w3_arbitrum, addrs["arbitrum"], USDT_ARBITRUM),
+            "usdt_optimism": get_usdt_balance(w3_optimism, addrs["optimism"], USDT_OPTIMISM),
+            "sol": get_solana_balance(addrs["sol"]),
             "doge": get_dogecoin_balance(addrs["doge"]) if addrs["doge"] else 0,
             "xrp": get_ripple_balance(addrs["xrp"]) if addrs["xrp"] else 0,
             "ltc": get_litecoin_balance(addrs["ltc"]) if addrs["ltc"] else 0,
@@ -268,15 +275,28 @@ def check_all_balances(mnemonic):
         return None
 
 def has_balance(balance):
+    if not balance:
+        return False
     return any([
-        balance['btc'] > 0, balance['eth'] > 0, balance['bnb'] > 0,
-        balance['polygon'] > 0, balance['avalanche'] > 0, balance['arbitrum'] > 0,
-        balance['optimism'] > 0, balance['sol'] > 0, balance['doge'] > 0,
-        balance['xrp'] > 0, balance['ltc'] > 0, balance['trx'] > 0,
-        balance['usdt_erc20'] > 0, balance['usdt_bep20'] > 0,
-        balance['usdt_polygon'] > 0, balance['usdt_avalanche'] > 0,
-        balance['usdt_arbitrum'] > 0, balance['usdt_optimism'] > 0,
-        balance['usdt_trc20'] > 0
+        balance.get('btc', 0) > 0,
+        balance.get('eth', 0) > 0,
+        balance.get('bnb', 0) > 0,
+        balance.get('polygon', 0) > 0,
+        balance.get('avalanche', 0) > 0,
+        balance.get('arbitrum', 0) > 0,
+        balance.get('optimism', 0) > 0,
+        balance.get('sol', 0) > 0,
+        balance.get('doge', 0) > 0,
+        balance.get('xrp', 0) > 0,
+        balance.get('ltc', 0) > 0,
+        balance.get('trx', 0) > 0,
+        balance.get('usdt_erc20', 0) > 0,
+        balance.get('usdt_bep20', 0) > 0,
+        balance.get('usdt_polygon', 0) > 0,
+        balance.get('usdt_avalanche', 0) > 0,
+        balance.get('usdt_arbitrum', 0) > 0,
+        balance.get('usdt_optimism', 0) > 0,
+        balance.get('usdt_trc20', 0) > 0
     ])
 
 def init_storage(context):
@@ -312,6 +332,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🌐 <b>Crypto Seed Bot MAX</b>\n\n"
         "Проверяю <b>12 сетей и 8 токенов USDT</b>\n\n"
+        "✅ Bitcoin | Ethereum | BSC | Polygon | Avalanche | Arbitrum | Optimism\n"
+        "✅ Solana | Dogecoin | Ripple | Litecoin | Tron\n"
+        "✅ USDT (ERC20, BEP20, Polygon, Avalanche, Arbitrum, Optimism, TRC20)\n\n"
         "⚠️ <b>Никогда не вводите реальные сид-фразы от кошельков с деньгами!</b>\n\n"
         "Выберите действие:",
         parse_mode="HTML",
@@ -351,7 +374,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"🔹 С балансом: <b>{non_empty}</b>\n"
         
         if phrases:
-            text += f"\n<b>💰 Найденные фразы:</b>\n"
+            text += f"\n<b>💰 Найденные фразы (первые 10):</b>\n"
             for i, phrase in enumerate(phrases[:10], 1):
                 text += f"{i}. <code>{phrase[:40]}...</code>\n"
         
@@ -360,7 +383,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("batch_"):
         count = int(data.split("_")[1])
-        await query.edit_message_text(f"⏳ Генерирую {count} фраз...")
+        await query.edit_message_text(f"⏳ Генерирую {count} фраз... Это может занять время.")
         mnemo = Mnemonic("english")
         found = []
         
@@ -372,24 +395,29 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.bot_data['total_checks'] += 1
                 if has_balance(balance):
                     found.append(phrase)
-            if i % 10 == 0:
+            if i % 10 == 0 and i > 0:
                 await sleep(0.5)
         
-        text = f"✅ Генерация {count} фраз завершена\n"
-        text += f"Найдено с балансом: {len(found)}\n"
-        text += f"Всего проверено: {context.bot_data['total_checks']}"
+        text = f"✅ <b>Генерация {count} фраз завершена</b>\n\n"
+        text += f"🔹 Найдено с балансом: <b>{len(found)}</b>\n"
+        text += f"🔹 Всего проверено: <b>{context.bot_data['total_checks']}</b>\n"
         
-        await query.edit_message_text(text, reply_markup=main_menu_keyboard())
+        if found:
+            text += f"\n<b>Найденные фразы:</b>\n"
+            for idx, phrase in enumerate(found[:5], 1):
+                text += f"{idx}. <code>{phrase}</code>\n"
+        
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=main_menu_keyboard())
         return
 
-    if data.startswith("gen_"):
-        await query.edit_message_text("⏳ Генерирую...")
+    if data == "gen_1":
+        await query.edit_message_text("⏳ Генерирую и проверяю...")
         mnemo = Mnemonic("english")
         phrase = mnemo.generate(strength=128)
         balance = check_all_balances(phrase)
         
         if not balance:
-            await query.edit_message_text("Ошибка!", reply_markup=main_menu_keyboard())
+            await query.edit_message_text("Ошибка при проверке!", reply_markup=main_menu_keyboard())
             return
         
         context.bot_data['checked_phrases'][phrase] = balance
@@ -400,39 +428,62 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"₿ BTC: {balance['btc']:.8f}\n"
         text += f"Ξ ETH: {balance['eth']:.6f}\n"
         text += f"🔶 BNB: {balance['bnb']:.6f}\n"
+        text += f"🟣 POLYGON: {balance['polygon']:.6f}\n"
+        text += f"🏔 AVAX: {balance['avalanche']:.6f}\n"
+        text += f"📦 ARB: {balance['arbitrum']:.6f}\n"
+        text += f"⚡ OPT: {balance['optimism']:.6f}\n"
         text += f"◎ SOL: {balance['sol']:.6f}\n"
         text += f"🐕 DOGE: {balance['doge']:.8f}\n"
+        text += f"💧 XRP: {balance['xrp']:.4f}\n"
+        text += f"⚡ LTC: {balance['ltc']:.8f}\n"
         text += f"🌞 TRX: {balance['trx']:.2f}\n\n"
-        text += f"<b>💲 USDT TRC20:</b> ${balance['usdt_trc20']:.2f}\n"
+        text += f"<b>💱 USDT:</b>\n"
+        text += f"├ ERC20: ${balance['usdt_erc20']:.2f}\n"
+        text += f"├ BEP20: ${balance['usdt_bep20']:.2f}\n"
+        text += f"├ POLYGON: ${balance['usdt_polygon']:.2f}\n"
+        text += f"├ AVAX: ${balance['usdt_avalanche']:.2f}\n"
+        text += f"├ ARB: ${balance['usdt_arbitrum']:.2f}\n"
+        text += f"├ OPT: ${balance['usdt_optimism']:.2f}\n"
+        text += f"└ TRC20: ${balance['usdt_trc20']:.2f}\n"
+        
+        if has_balance(balance):
+            text += f"\n✅ <b>Найден ненулевой баланс!</b>"
         
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=main_menu_keyboard())
+        return
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     init_storage(context)
     
     if context.user_data.get('awaiting_check'):
         phrase = update.message.text.strip()
-        if len(phrase.split()) not in (12, 15, 18, 21, 24):
-            await update.message.reply_text("❌ Фраза должна содержать 12 слов.")
+        word_count = len(phrase.split())
+        if word_count not in (12, 15, 18, 21, 24):
+            await update.message.reply_text(f"❌ Фраза должна содержать 12, 15, 18, 21 или 24 слова. У вас {word_count}.")
             context.user_data['awaiting_check'] = False
             return
         
-        await update.message.reply_text("⏳ Проверяю балансы...")
+        await update.message.reply_text("⏳ Проверяю балансы (12 сетей)...")
         balance = check_all_balances(phrase)
         
         if not balance:
-            await update.message.reply_text("Ошибка проверки.")
+            await update.message.reply_text("❌ Ошибка при проверке фразы.")
         else:
             context.bot_data['checked_phrases'][phrase] = balance
             context.bot_data['total_checks'] += 1
             
-            text = f"<b>🔑 Сид-фраза сохранена в статистику</b>\n\n"
+            text = f"<b>✅ Фраза проверена и сохранена!</b>\n\n"
+            text += f"<b>💰 Основные балансы:</b>\n"
             text += f"₿ BTC: {balance['btc']:.8f}\n"
             text += f"Ξ ETH: {balance['eth']:.6f}\n"
             text += f"◎ SOL: {balance['sol']:.6f}\n"
+            text += f"🐕 DOGE: {balance['doge']:.8f}\n"
+            text += f"🌞 TRX: {balance['trx']:.2f}\n"
+            text += f"💲 USDT TRC20: ${balance['usdt_trc20']:.2f}\n\n"
+            text += f"📊 Всего проверено фраз: <b>{context.bot_data['total_checks']}</b>"
             
             if has_balance(balance):
-                text += f"\n✅ <b>Найден ненулевой баланс!</b>"
+                text += f"\n\n🎉 <b>ВНИМАНИЕ! Найден ненулевой баланс!</b>"
             
             await update.message.reply_text(text, parse_mode="HTML")
         
@@ -444,11 +495,16 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     init_storage(context)
     total = context.bot_data['total_checks']
     non_empty = sum(1 for b in context.bot_data['checked_phrases'].values() if has_balance(b))
-    await update.message.reply_text(f"📊 Статистика\n\nВсего: {total}\nС балансом: {non_empty}", reply_markup=main_menu_keyboard())
+    await update.message.reply_text(
+        f"📊 <b>Статистика</b>\n\n"
+        f"🔹 Всего проверено фраз: <b>{total}</b>\n"
+        f"🔹 Фраз с балансом: <b>{non_empty}</b>",
+        parse_mode="HTML",
+        reply_markup=main_menu_keyboard()
+    )
 
 # ========== Защита от конфликтов ==========
 async def run_bot():
-    """Запуск бота с обработкой конфликтов"""
     app = Application.builder().token(TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
@@ -456,7 +512,6 @@ async def run_bot():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Попытка запуска с обработкой ошибки Conflict
     try:
         logger.info("Starting bot...")
         await app.initialize()
@@ -464,7 +519,6 @@ async def run_bot():
         await app.updater.start_polling(drop_pending_updates=True, allowed_updates=["message", "callback_query"])
         logger.info("Bot started successfully!")
         
-        # Ожидаем завершения (бесконечно)
         while True:
             await asyncio.sleep(3600)
             
@@ -479,7 +533,6 @@ async def run_bot():
         await run_bot()
 
 def main():
-    """Точка входа с обработкой сигналов"""
     def signal_handler(sig, frame):
         logger.info("Shutting down...")
         sys.exit(0)
@@ -487,7 +540,6 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    # Запускаем бота с авто-перезапуском
     asyncio.run(run_bot())
 
 if __name__ == "__main__":
