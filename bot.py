@@ -18,7 +18,6 @@ if not TOKEN:
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Web3 провайдеры
 ETH_RPC = "https://cloudflare-eth.com"
 BSC_RPC = "https://bsc-dataseed.binance.org/"
 w3_eth = Web3(Web3.HTTPProvider(ETH_RPC))
@@ -99,7 +98,7 @@ def check_all_balances(mnemonic):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привет! Я бот для генерации и проверки BIP39 сид-фраз.\n"
                                     "Команды:\n"
-                                    "/generate - сгенерировать новую сид-фразу и проверить её балансы\n"
+                                    "/generate - сгенерировать новую сид-фразу и проверить балансы\n"
                                     "/check <сид-фраза> - проверить балансы для указанной фразы\n"
                                     "/stats - статистика проверок")
 
@@ -108,7 +107,7 @@ cache = {}
 async def generate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("Генерирую новую сид-фразу и проверяю балансы...")
     mnemo = Mnemonic("english")
-    mnemonic = mnemo.generate(strength=128)   # 12 слов
+    mnemonic = mnemo.generate(strength=128)
     result = check_all_balances(mnemonic)
     if not result:
         await msg.edit_text("Ошибка при проверке балансов. Попробуйте позже.")
@@ -175,14 +174,11 @@ def main():
     app.add_handler(CommandHandler("check", check))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    # Запускаем Flask keep-alive (если нужен)
     try:
         from keep_alive import keep_alive
         keep_alive()
     except ImportError:
         pass
-    
     app.run_polling()
 
 if __name__ == "__main__":
