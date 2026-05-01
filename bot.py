@@ -4,11 +4,12 @@ import requests
 import json
 import base58
 import asyncio
+from datetime import datetime
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
-    filters, ContextTypes, CallbackQueryHandler
+    filters, ContextTypes
 )
 from mnemonic import Mnemonic
 from bip_utils import Bip39SeedGenerator, Bip44, Bip44Coins, Bip44Changes
@@ -100,22 +101,18 @@ def mnemonic_to_solana_address(mnemonic):
 def derive_addresses(mnemonic):
     seed = Bip39SeedGenerator(mnemonic).Generate()
     
-    # Bitcoin
     bip44_btc = Bip44.FromSeed(seed, Bip44Coins.BITCOIN)
     btc_addr = bip44_btc.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_EXT).AddressIndex(0).PublicKey().ToAddress()
     
-    # EVM (ETH, BSC, Polygon)
     bip44_eth = Bip44.FromSeed(seed, Bip44Coins.ETHEREUM)
     evm_addr = bip44_eth.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_EXT).AddressIndex(0).PublicKey().ToAddress()
     
-    # Tron
     try:
         bip44_trx = Bip44.FromSeed(seed, Bip44Coins.TRON)
         trx_addr = bip44_trx.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_EXT).AddressIndex(0).PublicKey().ToAddress()
     except:
         trx_addr = None
     
-    # Solana
     sol_addr = mnemonic_to_solana_address(mnemonic)
     
     return {
@@ -130,7 +127,6 @@ def derive_addresses(mnemonic):
 def check_all_balances(mnemonic):
     addrs = derive_addresses(mnemonic)
     
-    # Основные монеты
     btc = get_btc_balance(addrs["btc"])
     eth = get_evm_balance(w3_eth, addrs["eth"])
     bnb = get_evm_balance(w3_bsc, addrs["bnb"])
@@ -138,32 +134,20 @@ def check_all_balances(mnemonic):
     sol = get_solana_balance(addrs["sol"])
     trx = get_trx_balance(addrs["trx"]) if addrs["trx"] else 0
     
-    # USDT на всех сетях
     usdt_erc20 = get_token_balance(w3_eth, addrs["eth"], USDT_ERC20)
     usdt_bep20 = get_token_balance(w3_bsc, addrs["bnb"], USDT_BEP20)
     usdt_trc20 = get_usdt_trc20_balance(addrs["trx"]) if addrs["trx"] else 0
     
-    # Общая сумма в USD
     total_usd = (
-        btc * 60000 +
-        eth * 3000 +
-        bnb * 300 +
-        polygon * 0.5 +
-        sol * 150 +
-        trx * 0.1 +
+        btc * 60000 + eth * 3000 + bnb * 300 +
+        polygon * 0.5 + sol * 150 + trx * 0.1 +
         usdt_erc20 + usdt_bep20 + usdt_trc20
     )
     
     return {
-        "btc": btc,
-        "eth": eth,
-        "bnb": bnb,
-        "polygon": polygon,
-        "sol": sol,
-        "trx": trx,
-        "usdt_erc20": usdt_erc20,
-        "usdt_bep20": usdt_bep20,
-        "usdt_trc20": usdt_trc20,
+        "btc": btc, "eth": eth, "bnb": bnb, "polygon": polygon,
+        "sol": sol, "trx": trx,
+        "usdt_erc20": usdt_erc20, "usdt_bep20": usdt_bep20, "usdt_trc20": usdt_trc20,
         "total_usd": total_usd,
         "addresses": addrs
     }
@@ -171,217 +155,168 @@ def check_all_balances(mnemonic):
 def has_balance(balances):
     return balances["total_usd"] > 0
 
-# ========== Клавиатура ==========
+# ========== Клавиатура с увеличенным количеством ==========
 def main_menu():
     keyboard = [
-        [InlineKeyboardButton("✨ Сгенерировать 1 фразу", callback_data="gen_1")],
-        [InlineKeyboardButton("📦 Сгенерировать 5 фраз", callback_data="batch_5")],
-        [InlineKeyboardButton("📦 Сгенерировать 10 фраз", callback_data="batch_10")],
-        [InlineKeyboardButton("📦 Сгенерировать 25 фраз", callback_data="batch_25")],
-        [InlineKeyboardButton("📦 Сгенерировать 50 фраз", callback_data="batch_50")],
-        [InlineKeyboardButton("📦 Сгенерировать 100 фраз", callback_data="batch_100")],
-        [InlineKeyboardButton("🔍 Проверить фразу", callback_data="check")],
-        [InlineKeyboardButton("📊 Статистика", callback_data="stats")],
-        [InlineKeyboardButton("🛑 Остановить генерацию", callback_data="stop_gen")]
+        [KeyboardButton("✨ 1 фразу")],
+        [KeyboardButton("📦 5"), KeyboardButton("📦 10"), KeyboardButton("📦 25")],
+        [KeyboardButton("📦 50"), KeyboardButton("📦 100"), KeyboardButton("📦 500")],
+        [KeyboardButton("📦 1000"), KeyboardButton("📦 2000")],
+        [KeyboardButton("🔍 Проверить фразу")],
+        [KeyboardButton("📊 Статистика"), KeyboardButton("🛑 Остановить")]
     ]
-    return InlineKeyboardMarkup(keyboard)
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
 
-# ========== Команды ==========
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ========== Генерация и сохранение ==========
+async def generate_batch(update: Update, context: ContextTypes.DEFAULT_TYPE, count: int):
+    context.user_data['generating'] = True
+    context.user_data['all_phrases'] = []
+    context.user_data['found_phrases'] = []
+    context.user_data['checked'] = 0
+
     await update.message.reply_text(
-        "🚀 <b>Crypto Seed Bot</b>\n\n"
-        "✅ <b>Проверяю:</b>\n"
-        "₿ Bitcoin | Ξ Ethereum | 🔶 BNB\n"
-        "🟣 Polygon | ◎ Solana | 🌞 Tron\n"
-        "💲 USDT (ERC20, BEP20, TRC20)\n\n"
-        "📦 При массовой генерации КАЖДАЯ фраза приходит отдельно\n"
-        "📊 В конце — финальный отчёт\n\n"
-        "Выберите действие:",
-        parse_mode="HTML",
-        reply_markup=main_menu()
+        f"⏳ <b>Начинаю генерацию {count} фраз</b>\n\n"
+        f"Каждая фраза придёт отдельно.",
+        parse_mode="HTML"
     )
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
+    for i in range(1, count + 1):
+        if not context.user_data.get('generating', True):
+            await update.message.reply_text("🛑 Остановлено.")
+            break
 
-    if data == "main_menu":
-        await query.edit_message_text("Выберите действие:", reply_markup=main_menu())
-        return
-
-    if data == "check":
-        context.user_data['awaiting_check'] = True
-        await query.edit_message_text(
-            "✍️ <b>Отправьте сид-фразу (12 слов)</b>\n\n"
-            "Пример: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-            parse_mode="HTML"
-        )
-        return
-
-    if data == "stats":
-        stats = context.bot_data.get('stats', {'total': 0, 'found': 0})
-        await query.edit_message_text(
-            f"📊 <b>Статистика</b>\n\n"
-            f"├ Всего проверено: {stats.get('total', 0)}\n"
-            f"└ Найдено с балансом: {stats.get('found', 0)}",
-            parse_mode="HTML",
-            reply_markup=main_menu()
-        )
-        return
-
-    if data == "stop_gen":
-        context.user_data['generating'] = False
-        await query.edit_message_text("🛑 Генерация остановлена.", reply_markup=main_menu())
-        return
-
-    if data == "gen_1":
-        await query.edit_message_text("⏳ Генерирую...")
         mnemo = Mnemonic("english")
         phrase = mnemo.generate(strength=128)
         balances = check_all_balances(phrase)
+        context.user_data['checked'] += 1
 
-        stats = context.bot_data.get('stats', {'total': 0, 'found': 0})
-        stats['total'] += 1
-        if has_balance(balances):
-            stats['found'] += 1
-        context.bot_data['stats'] = stats
-
-        text = f"<b>🔑 Сид-фраза:</b>\n<code>{phrase}</code>\n\n"
-        text += f"<b>💰 Балансы:</b>\n"
-        text += f"₿ BTC: {balances['btc']:.8f}\n"
-        text += f"Ξ ETH: {balances['eth']:.6f}\n"
-        text += f"🔶 BNB: {balances['bnb']:.6f}\n"
-        text += f"🟣 MATIC: {balances['polygon']:.6f}\n"
-        text += f"◎ SOL: {balances['sol']:.6f}\n"
-        text += f"🌞 TRX: {balances['trx']:.2f}\n\n"
-        text += f"<b>💲 USDT:</b>\n"
-        text += f"├ ERC20: ${balances['usdt_erc20']:.2f}\n"
-        text += f"├ BEP20: ${balances['usdt_bep20']:.2f}\n"
-        text += f"└ TRC20: ${balances['usdt_trc20']:.2f}\n\n"
-        text += f"💵 <b>ИТОГО: ~${balances['total_usd']:.2f}</b>"
+        context.user_data['all_phrases'].append({
+            "phrase": phrase,
+            "balances": balances
+        })
 
         if has_balance(balances):
-            text += f"\n\n🎉 <b>НАЙДЕН НЕНУЛЕВОЙ БАЛАНС!</b>"
+            context.user_data['found_phrases'].append({
+                "phrase": phrase,
+                "total_usd": balances['total_usd']
+            })
+            text = f"🎉 <b>НАЙДЕН БАЛАНС!</b> ({i}/{count})\n\n<code>{phrase}</code>\n💵 ~${balances['total_usd']:.2f}"
+        else:
+            text = f"❌ {i}/{count}\n<code>{phrase}</code>"
 
-        await query.edit_message_text(text, parse_mode="HTML", reply_markup=main_menu())
-        return
+        await update.message.reply_text(text, parse_mode="HTML", reply_markup=main_menu())
+        await asyncio.sleep(0.15)
 
-    if data.startswith("batch_"):
-        count = int(data.split("_")[1])
-        context.user_data['generating'] = True
-        context.user_data['found_phrases'] = []
-        context.user_data['checked'] = 0
+    # Финальный отчёт и файл
+    found = context.user_data['found_phrases']
+    all_phrases = context.user_data['all_phrases']
 
-        await query.edit_message_text(
-            f"⏳ <b>Начинаю генерацию {count} фраз</b>\n\n"
-            f"Каждая фраза придёт отдельным сообщением.\n"
-            f"🛑 Нажмите 'Остановить генерацию' чтобы прервать.",
-            parse_mode="HTML",
-            reply_markup=main_menu()
-        )
+    report = f"✅ <b>ГОТОВО</b>\n\n"
+    report += f"📊 Проверено: {context.user_data['checked']}\n"
+    report += f"💰 Найдено: {len(found)}\n\n"
 
-        for i in range(1, count + 1):
-            if not context.user_data.get('generating', True):
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text="🛑 Генерация остановлена.",
-                    reply_markup=main_menu()
-                )
-                break
+    if found:
+        report += f"<b>СПИСОК НАЙДЕННЫХ:</b>\n"
+        for idx, item in enumerate(found[:15], 1):
+            report += f"{idx}. {item['phrase'][:30]}... (${item['total_usd']:.2f})\n"
+        if len(found) > 15:
+            report += f"\n<i>+ ещё {len(found) - 15} фраз</i>\n"
 
-            mnemo = Mnemonic("english")
-            phrase = mnemo.generate(strength=128)
-            balances = check_all_balances(phrase)
-            context.user_data['checked'] += 1
+    await update.message.reply_text(report, parse_mode="HTML", reply_markup=main_menu())
 
-            if has_balance(balances):
-                context.user_data['found_phrases'].append({
-                    "phrase": phrase,
-                    "usdt_erc20": balances['usdt_erc20'],
-                    "usdt_bep20": balances['usdt_bep20'],
-                    "usdt_trc20": balances['usdt_trc20'],
-                    "total_usd": balances['total_usd']
-                })
-                text = f"🎉 <b>НАЙДЕН БАЛАНС!</b> ({i}/{count})\n\n"
-                text += f"<code>{phrase}</code>\n\n"
-                text += f"💲 USDT ERC20: ${balances['usdt_erc20']:.2f}\n"
-                text += f"💲 USDT BEP20: ${balances['usdt_bep20']:.2f}\n"
-                text += f"💲 USDT TRC20: ${balances['usdt_trc20']:.2f}\n"
-                text += f"💵 <b>~${balances['total_usd']:.2f}</b>"
-            else:
-                text = f"❌ <b>Фраза {i}/{count}</b> — пустая\n\n"
-                text += f"<code>{phrase}</code>"
+    # Отправляем файл со всеми фразами
+    if all_phrases:
+        filename = f"seed_phrases_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        with open(filename, "w", encoding="utf-8") as f:
+            for idx, item in enumerate(all_phrases, 1):
+                b = item["balances"]
+                f.write(f"{idx}. Фраза: {item['phrase']}\n")
+                f.write(f"   BTC: {b['btc']:.8f} | ETH: {b['eth']:.6f} | BNB: {b['bnb']:.6f}\n")
+                f.write(f"   MATIC: {b['polygon']:.6f} | SOL: {b['sol']:.6f} | TRX: {b['trx']:.2f}\n")
+                f.write(f"   USDT ERC20: ${b['usdt_erc20']:.2f} | BEP20: ${b['usdt_bep20']:.2f} | TRC20: ${b['usdt_trc20']:.2f}\n")
+                f.write(f"   Итого: ${b['total_usd']:.2f}\n")
+                f.write(f"   BTC адрес: {b['addresses']['btc']}\n")
+                f.write(f"   EVM адрес: {b['addresses']['eth']}\n")
+                f.write(f"   TRON адрес: {b['addresses']['trx']}\n")
+                f.write(f"   SOL адрес: {b['addresses']['sol']}\n")
+                f.write("-" * 50 + "\n")
+        
+        with open(filename, "rb") as f:
+            await update.message.reply_document(
+                document=f,
+                filename=filename,
+                caption=f"📄 Все {len(all_phrases)} сид-фраз в файле"
+            )
+        os.remove(filename)
 
-            await context.bot.send_message(chat_id=update.effective_chat.id, text=text, parse_mode="HTML")
-            await asyncio.sleep(0.2)
+    context.user_data['generating'] = False
 
-        found = context.user_data['found_phrases']
-        report = f"✅ <b>ГЕНЕРАЦИЯ ЗАВЕРШЕНА</b>\n\n"
-        report += f"📊 <b>Статистика:</b>\n"
-        report += f"├ Проверено фраз: {context.user_data['checked']}\n"
-        report += f"└ Найдено с балансом: {len(found)}\n"
-
-        if found:
-            report += f"\n💰 <b>СПИСОК НАЙДЕННЫХ ФРАЗ:</b>\n\n"
-            for idx, item in enumerate(found[:20], 1):
-                report += f"{idx}. <code>{item['phrase']}</code>\n"
-                report += f"   └ 💵 ~${item['total_usd']:.2f}\n\n"
-            if len(found) > 20:
-                report += f"<i>... и ещё {len(found) - 20} фраз</i>"
-
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=report,
-            parse_mode="HTML",
-            reply_markup=main_menu()
-        )
-        context.user_data['generating'] = False
-        return
-
+# ========== Обработка сообщений ==========
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get('awaiting_check'):
-        phrase = update.message.text.strip()
-        words = phrase.split()
-        if len(words) not in (12, 15, 18, 21, 24):
-            await update.message.reply_text(f"❌ Нужно 12, 15, 18, 21 или 24 слова. У вас {len(words)}.")
-            context.user_data['awaiting_check'] = False
-            return
+    text = update.message.text
 
-        await update.message.reply_text("⏳ Проверяю балансы...")
-        balances = check_all_balances(phrase)
-
+    if text == "✨ 1 фразу":
+        await generate_batch(update, context, 1)
+    elif text == "📦 5":
+        await generate_batch(update, context, 5)
+    elif text == "📦 10":
+        await generate_batch(update, context, 10)
+    elif text == "📦 25":
+        await generate_batch(update, context, 25)
+    elif text == "📦 50":
+        await generate_batch(update, context, 50)
+    elif text == "📦 100":
+        await generate_batch(update, context, 100)
+    elif text == "📦 500":
+        await generate_batch(update, context, 500)
+    elif text == "📦 1000":
+        await generate_batch(update, context, 1000)
+    elif text == "📦 2000":
+        await generate_batch(update, context, 2000)
+    elif text == "🔍 Проверить фразу":
+        context.user_data['awaiting_check'] = True
+        await update.message.reply_text("✍️ Отправьте сид-фразу (12 слов):")
+    elif text == "📊 Статистика":
         stats = context.bot_data.get('stats', {'total': 0, 'found': 0})
-        stats['total'] += 1
-        if has_balance(balances):
-            stats['found'] += 1
-        context.bot_data['stats'] = stats
-
-        text = f"<b>✅ Результат проверки</b>\n\n"
-        text += f"₿ BTC: {balances['btc']:.8f}\n"
-        text += f"◎ SOL: {balances['sol']:.6f}\n"
-        text += f"🌞 TRX: {balances['trx']:.2f}\n\n"
-        text += f"<b>💲 USDT:</b>\n"
-        text += f"├ ERC20: ${balances['usdt_erc20']:.2f}\n"
-        text += f"├ BEP20: ${balances['usdt_bep20']:.2f}\n"
-        text += f"└ TRC20: ${balances['usdt_trc20']:.2f}\n\n"
-        text += f"💵 <b>ИТОГО: ~${balances['total_usd']:.2f}</b>\n\n"
-        text += f"📍 TRON: <code>{balances['addresses']['trx']}</code>\n"
-        text += f"📊 Статистика: проверено {stats['total']}, найдено {stats['found']}"
-
-        if has_balance(balances):
-            text += f"\n\n🎉 <b>НАЙДЕН НЕНУЛЕВОЙ БАЛАНС!</b>"
-
-        await update.message.reply_text(text, parse_mode="HTML")
+        await update.message.reply_text(
+            f"📊 Статистика\n\nВсего проверено: {stats.get('total', 0)}\nНайдено: {stats.get('found', 0)}",
+            reply_markup=main_menu()
+        )
+    elif text == "🛑 Остановить":
+        context.user_data['generating'] = False
+        await update.message.reply_text("🛑 Остановлено.", reply_markup=main_menu())
+    elif context.user_data.get('awaiting_check'):
+        phrase = text.strip()
+        if len(phrase.split()) in (12, 15, 18, 21, 24):
+            await update.message.reply_text("⏳ Проверяю...")
+            balances = check_all_balances(phrase)
+            stats = context.bot_data.get('stats', {'total': 0, 'found': 0})
+            stats['total'] += 1
+            if has_balance(balances):
+                stats['found'] += 1
+            context.bot_data['stats'] = stats
+            result = f"✅ Результат\n\n"
+            result += f"BTC: {balances['btc']:.8f}\nETH: {balances['eth']:.6f}\nBNB: {balances['bnb']:.6f}\n"
+            result += f"MATIC: {balances['polygon']:.6f}\nSOL: {balances['sol']:.6f}\nTRX: {balances['trx']:.2f}\n\n"
+            result += f"USDT ERC20: ${balances['usdt_erc20']:.2f}\nUSDT BEP20: ${balances['usdt_bep20']:.2f}\nUSDT TRC20: ${balances['usdt_trc20']:.2f}\n"
+            result += f"💰 Итого: ${balances['total_usd']:.2f}"
+            await update.message.reply_text(result, reply_markup=main_menu())
+        else:
+            await update.message.reply_text("❌ Некорректная сид-фраза.")
         context.user_data['awaiting_check'] = False
     else:
-        await update.message.reply_text("Используйте кнопки меню 👇", reply_markup=main_menu())
+        await update.message.reply_text("Нажмите на кнопку", reply_markup=main_menu())
 
-# ========== Запуск ==========
+# ========== Старт ==========
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🚀 Crypto Seed Bot\n\n✅ BTC, ETH, BNB, MATIC, SOL, TRX\n💲 USDT (ERC20, BEP20, TRC20)\n\n⬇️ Нажмите кнопку:",
+        reply_markup=main_menu()
+    )
+
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     if 'stats' not in app.bot_data:
