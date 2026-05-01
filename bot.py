@@ -107,7 +107,7 @@ cache = {}
 async def generate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("Генерирую новую сид-фразу и проверяю балансы...")
     mnemo = Mnemonic("english")
-    mnemonic = mnemo.generate(strength=128)
+    mnemonic = mnemo.generate(strength=128)  # 12 слов
     result = check_all_balances(mnemonic)
     if not result:
         await msg.edit_text("Ошибка при проверке балансов. Попробуйте позже.")
