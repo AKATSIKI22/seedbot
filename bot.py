@@ -62,7 +62,6 @@ def get_btc_balance(address):
         return 0
 
 def get_solana_balance(address):
-    """Получает SOL баланс через публичный RPC"""
     try:
         resp = requests.post(
             "https://api.mainnet-beta.solana.com",
@@ -95,7 +94,6 @@ def get_usdt_trc20_balance(address):
         return 0
 
 def mnemonic_to_solana_address(mnemonic):
-    """Генерирует Solana адрес из сид-фразы"""
     seed = Mnemonic.to_seed(mnemonic, passphrase="")
     return base58.b58encode(seed[:32]).decode()
 
@@ -132,7 +130,7 @@ def derive_addresses(mnemonic):
 def check_all_balances(mnemonic):
     addrs = derive_addresses(mnemonic)
     
-    # Получаем балансы
+    # Основные монеты
     btc = get_btc_balance(addrs["btc"])
     eth = get_evm_balance(w3_eth, addrs["eth"])
     bnb = get_evm_balance(w3_bsc, addrs["bnb"])
@@ -140,6 +138,7 @@ def check_all_balances(mnemonic):
     sol = get_solana_balance(addrs["sol"])
     trx = get_trx_balance(addrs["trx"]) if addrs["trx"] else 0
     
+    # USDT на всех сетях
     usdt_erc20 = get_token_balance(w3_eth, addrs["eth"], USDT_ERC20)
     usdt_bep20 = get_token_balance(w3_bsc, addrs["bnb"], USDT_BEP20)
     usdt_trc20 = get_usdt_trc20_balance(addrs["trx"]) if addrs["trx"] else 0
@@ -172,7 +171,7 @@ def check_all_balances(mnemonic):
 def has_balance(balances):
     return balances["total_usd"] > 0
 
-# ========== Клавиатуры ==========
+# ========== Клавиатура ==========
 def main_menu():
     keyboard = [
         [InlineKeyboardButton("✨ Сгенерировать 1 фразу", callback_data="gen_1")],
@@ -222,12 +221,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "stats":
         stats = context.bot_data.get('stats', {'total': 0, 'found': 0})
-        total = stats.get('total', 0)
-        found = stats.get('found', 0)
         await query.edit_message_text(
             f"📊 <b>Статистика</b>\n\n"
-            f"├ Всего проверено: {total}\n"
-            f"└ Найдено с балансом: {found}",
+            f"├ Всего проверено: {stats.get('total', 0)}\n"
+            f"└ Найдено с балансом: {stats.get('found', 0)}",
             parse_mode="HTML",
             reply_markup=main_menu()
         )
@@ -301,21 +298,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if has_balance(balances):
                 context.user_data['found_phrases'].append({
                     "phrase": phrase,
+                    "usdt_erc20": balances['usdt_erc20'],
+                    "usdt_bep20": balances['usdt_bep20'],
                     "usdt_trc20": balances['usdt_trc20'],
                     "total_usd": balances['total_usd']
                 })
                 text = f"🎉 <b>НАЙДЕН БАЛАНС!</b> ({i}/{count})\n\n"
                 text += f"<code>{phrase}</code>\n\n"
-                text += f"💵 ~${balances['total_usd']:.2f}"
+                text += f"💲 USDT ERC20: ${balances['usdt_erc20']:.2f}\n"
+                text += f"💲 USDT BEP20: ${balances['usdt_bep20']:.2f}\n"
+                text += f"💲 USDT TRC20: ${balances['usdt_trc20']:.2f}\n"
+                text += f"💵 <b>~${balances['total_usd']:.2f}</b>"
             else:
                 text = f"❌ <b>Фраза {i}/{count}</b> — пустая\n\n"
-                text += f"<code>{phrase}</code>\n"
-                text += f"💰 USDT TRC20: ${balances['usdt_trc20']:.2f}"
+                text += f"<code>{phrase}</code>"
 
             await context.bot.send_message(chat_id=update.effective_chat.id, text=text, parse_mode="HTML")
             await asyncio.sleep(0.2)
 
-        # Финальный отчёт
         found = context.user_data['found_phrases']
         report = f"✅ <b>ГЕНЕРАЦИЯ ЗАВЕРШЕНА</b>\n\n"
         report += f"📊 <b>Статистика:</b>\n"
@@ -360,8 +360,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = f"<b>✅ Результат проверки</b>\n\n"
         text += f"₿ BTC: {balances['btc']:.8f}\n"
         text += f"◎ SOL: {balances['sol']:.6f}\n"
-        text += f"🌞 TRX: {balances['trx']:.2f}\n"
-        text += f"💲 USDT TRC20: ${balances['usdt_trc20']:.2f}\n"
+        text += f"🌞 TRX: {balances['trx']:.2f}\n\n"
+        text += f"<b>💲 USDT:</b>\n"
+        text += f"├ ERC20: ${balances['usdt_erc20']:.2f}\n"
+        text += f"├ BEP20: ${balances['usdt_bep20']:.2f}\n"
+        text += f"└ TRC20: ${balances['usdt_trc20']:.2f}\n\n"
         text += f"💵 <b>ИТОГО: ~${balances['total_usd']:.2f}</b>\n\n"
         text += f"📍 TRON: <code>{balances['addresses']['trx']}</code>\n"
         text += f"📊 Статистика: проверено {stats['total']}, найдено {stats['found']}"
