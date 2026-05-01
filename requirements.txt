@@ -1,8 +1,8 @@
 wheel
 setuptools
 python-telegram-bot==21.10
+bip-utils
 mnemonic
-bip39
 requests
 web3
 python-dotenv
