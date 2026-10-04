@@ -6,3 +6,4 @@ web3
 base58
 solders
 python-dotenv
+flask
