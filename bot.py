@@ -35,7 +35,6 @@ if not TOKEN:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Чтобы Telegram-токен не отображался в логах
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
@@ -290,19 +289,18 @@ async def generate_batch(
 
 
     # ======================================================
-    # СОЗДАЁМ TXT-ФАЙЛ
+    # ДВА ФАЙЛА: ФРАЗЫ+АДРЕСА И ТОЛЬКО АДРЕСА
     # ======================================================
 
-    filename = (
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
 
-        f"seed_phrases_"
-        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
 
-    )
+    # ---------- Файл 1: фразы + адреса ----------
 
+    seeds_filename = f"seed_phrases_{ts}.txt"
 
     with open(
-        filename,
+        seeds_filename,
         "w",
         encoding="utf-8"
     ) as f:
@@ -357,13 +355,37 @@ async def generate_batch(
             )
 
 
+    # ---------- Файл 2: только адреса ----------
+
+    addresses_filename = f"addresses_{ts}.txt"
+
+    with open(
+        addresses_filename,
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        for item in results:
+
+            a = item["addresses"]
+
+
+            f.write(f"{a['btc']}\n")
+            f.write(f"{a['eth']}\n")
+            f.write(f"{a['bnb']}\n")
+            f.write(f"{a['trx']}\n")
+            f.write(f"{a['sol']}\n")
+
+
     await progress_msg.edit_text(
         f"✅ Готово: {len(results)} фраз"
     )
 
 
+    # ---------- Отправляем файл 1 ----------
+
     with open(
-        filename,
+        seeds_filename,
         "rb"
     ) as f:
 
@@ -371,7 +393,7 @@ async def generate_batch(
 
             document=f,
 
-            filename=filename,
+            filename=seeds_filename,
 
             caption=(
                 f"📄 {len(results)} "
@@ -381,15 +403,40 @@ async def generate_batch(
         )
 
 
-    try:
+    # ---------- Отправляем файл 2 ----------
 
-        os.remove(filename)
+    with open(
+        addresses_filename,
+        "rb"
+    ) as f:
 
-    except Exception as e:
+        await update.message.reply_document(
 
-        logger.error(
-            f"File remove error: {e}"
+            document=f,
+
+            filename=addresses_filename,
+
+            caption=(
+                f"📄 {len(results) * 5} "
+                f"адресов (BTC/ETH/BNB/TRX/SOL)"
+            )
+
         )
+
+
+    # ---------- Удаляем временные файлы ----------
+
+    for path in (seeds_filename, addresses_filename):
+
+        try:
+
+            os.remove(path)
+
+        except Exception as e:
+
+            logger.error(
+                f"File remove error: {e}"
+            )
 
 
 # ==========================================================
@@ -485,7 +532,11 @@ async def start(
 
         "• SOL\n\n"
 
-        "Результат приходит одним файлом.\n\n"
+        "Приходит двумя файлами:\n"
+
+        "1) фразы + адреса\n"
+
+        "2) только адреса\n\n"
 
         "⬇️ Нажмите кнопку:",
 
@@ -500,7 +551,6 @@ async def start(
 
 def main():
 
-    # Запускаем HTTP-сервер для Render
     web_thread = threading.Thread(
         target=run_web,
         daemon=True
@@ -514,7 +564,6 @@ def main():
     )
 
 
-    # Запускаем Telegram-бота
     app = (
         Application.builder()
         .token(TOKEN)
